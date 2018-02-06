@@ -261,7 +261,48 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 							}
 
 							if elemType.Kind() == reflect.Struct {
-								if many2many := field.TagSettings["MANY2MANY"]; many2many != "" {
+								if many2many := field.TagSettings["MANY2MANYSTRICT"]; many2many != "" {
+									relationship.Kind = "many_to_many"
+
+									// if no foreign keys defined with tag
+									if len(foreignKeys) == 0 {
+										for _, field := range modelStruct.PrimaryFields {
+											foreignKeys = append(foreignKeys, field.DBName)
+										}
+									}
+
+									for _, foreignKey := range foreignKeys {
+										if foreignField := getForeignField(foreignKey, modelStruct.StructFields); foreignField != nil {
+											// source foreign keys (db names)
+											relationship.ForeignFieldNames = append(relationship.ForeignFieldNames, foreignField.DBName)
+											// join table foreign keys for source
+											joinTableDBName := ToDBName(reflectType.Name()) + "_" + foreignField.DBName
+											relationship.ForeignDBNames = append(relationship.ForeignDBNames, joinTableDBName)
+										}
+									}
+
+									// if no association foreign keys defined with tag
+									if len(associationForeignKeys) == 0 {
+										for _, field := range toScope.PrimaryFields() {
+											associationForeignKeys = append(associationForeignKeys, field.DBName)
+										}
+									}
+
+									for _, name := range associationForeignKeys {
+										if field, ok := toScope.FieldByName(name); ok {
+											// association foreign keys (db names)
+											relationship.AssociationForeignFieldNames = append(relationship.AssociationForeignFieldNames, field.DBName)
+											// join table foreign keys for association
+											joinTableDBName := ToDBName(field.DBName)
+											relationship.AssociationForeignDBNames = append(relationship.AssociationForeignDBNames, joinTableDBName)
+										}
+									}
+
+									joinTableHandler := JoinTableHandler{}
+									joinTableHandler.Setup(relationship, many2many, reflectType, elemType)
+									relationship.JoinTableHandler = &joinTableHandler
+									field.Relationship = relationship
+								} else if many2many := field.TagSettings["MANY2MANY"]; many2many != "" {
 									relationship.Kind = "many_to_many"
 
 									// if no foreign keys defined with tag
